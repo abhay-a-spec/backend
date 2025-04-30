@@ -48,26 +48,27 @@ app.get('/files/:id', async (req, res) => {
     res.download(file.path, file.name);
 });
 
-// ✅ DELETE file by ID (NEW)
+// ✅ DELETE file by ID (robust version)
 app.delete('/files/:id', async (req, res) => {
     try {
         const file = await File.findById(req.params.id);
-        if (!file) return res.status(404).send({ message: 'File not found' });
+        if (!file) return res.status(404).send({ message: 'File not found in DB' });
 
-        // Delete file from disk
+        // Attempt to delete from disk
         fs.unlink(file.path, async (err) => {
-            if (err) {
+            if (err && err.code !== 'ENOENT') {
+                // ENOENT = file already deleted from disk, ignore that
                 console.error('Error deleting file from disk:', err);
                 return res.status(500).send({ message: 'Error deleting file from disk' });
             }
 
-            // Delete from MongoDB
+            // Delete from DB
             await File.deleteOne({ _id: req.params.id });
             res.send({ message: 'File deleted successfully' });
         });
     } catch (err) {
         console.error('Delete error:', err);
-        res.status(500).send({ message: 'Internal server error' });
+        res.status(500).send({ message: 'Internal server error during deletion' });
     }
 });
 
