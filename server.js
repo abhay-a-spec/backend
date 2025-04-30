@@ -36,38 +36,59 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
 // Fetch all files
 app.get('/files', async (req, res) => {
-    const files = await File.find();
-    res.send(files);
+    try {
+        const files = await File.find();
+        res.send(files);
+    } catch (err) {
+        console.error('Error fetching files:', err);
+        res.status(500).send({ message: 'Error fetching files. Please try again later.' });
+    }
 });
 
 // Download file by ID
 app.get('/files/:id', async (req, res) => {
-    const file = await File.findById(req.params.id);
-    if (!file) return res.status(404).send({ message: 'File not found' });
+    try {
+        const file = await File.findById(req.params.id);
+        if (!file) return res.status(404).send({ message: 'File not found' });
 
-    res.download(file.path, file.name);
+        res.download(file.path, file.name);
+    } catch (err) {
+        console.error('Error downloading file:', err);
+        res.status(500).send({ message: 'Error downloading file. Please try again later.' });
+    }
 });
 
 // ✅ DELETE file by ID (robust version)
 app.delete('/files/:id', async (req, res) => {
     try {
+        // Find the file by ID
         const file = await File.findById(req.params.id);
         if (!file) return res.status(404).send({ message: 'File not found in DB' });
 
-        // Attempt to delete from disk
+        // Attempt to delete the file from the disk
         fs.unlink(file.path, async (err) => {
-            if (err && err.code !== 'ENOENT') {
-                // ENOENT = file already deleted from disk, ignore that
-                console.error('Error deleting file from disk:', err);
-                return res.status(500).send({ message: 'Error deleting file from disk' });
+            if (err) {
+                if (err.code === 'ENOENT') {
+                    // ENOENT means the file was not found, perhaps already deleted
+                    console.log(`File already deleted from disk: ${file.path}`);
+                } else {
+                    // If there's another error while deleting, log it and return an error response
+                    console.error('Error deleting file from disk:', err);
+                    return res.status(500).send({ message: 'Error deleting file from disk' });
+                }
             }
 
-            // Delete from DB
-            await File.deleteOne({ _id: req.params.id });
-            res.send({ message: 'File deleted successfully' });
+            // If deletion from disk succeeded (or file was already deleted), proceed to remove it from DB
+            try {
+                await File.deleteOne({ _id: req.params.id });
+                res.send({ message: 'File deleted successfully' });
+            } catch (dbError) {
+                console.error('Error deleting file from database:', dbError);
+                res.status(500).send({ message: 'Error deleting file from database' });
+            }
         });
     } catch (err) {
-        console.error('Delete error:', err);
+        console.error('Error during file deletion process:', err);
         res.status(500).send({ message: 'Internal server error during deletion' });
     }
 });
