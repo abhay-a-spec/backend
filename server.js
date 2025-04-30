@@ -61,31 +61,34 @@ app.get('/files/:id', async (req, res) => {
 // ✅ DELETE file by ID (robust version)
 app.delete('/files/:id', async (req, res) => {
     try {
-        // Find the file by ID
-        const file = await File.findById(req.params.id);
-        if (!file) return res.status(404).send({ message: 'File not found in DB' });
+        console.log(`Attempting to delete file with ID: ${req.params.id}`);
 
-        // Attempt to delete the file from the disk
+        // Find the file in the DB
+        const file = await File.findById(req.params.id);
+        if (!file) {
+            console.error(`File with ID ${req.params.id} not found in DB`);
+            return res.status(404).send({ message: 'File not found in DB' });
+        }
+
+        console.log(`Found file: ${file.name} at ${file.path}`);
+
+        // Attempt to delete the file from disk
         fs.unlink(file.path, async (err) => {
             if (err) {
                 if (err.code === 'ENOENT') {
-                    // ENOENT means the file was not found, perhaps already deleted
+                    // File already deleted from disk
                     console.log(`File already deleted from disk: ${file.path}`);
                 } else {
-                    // If there's another error while deleting, log it and return an error response
+                    // General file deletion error
                     console.error('Error deleting file from disk:', err);
                     return res.status(500).send({ message: 'Error deleting file from disk' });
                 }
             }
 
-            // If deletion from disk succeeded (or file was already deleted), proceed to remove it from DB
-            try {
-                await File.deleteOne({ _id: req.params.id });
-                res.send({ message: 'File deleted successfully' });
-            } catch (dbError) {
-                console.error('Error deleting file from database:', dbError);
-                res.status(500).send({ message: 'Error deleting file from database' });
-            }
+            // After deleting from disk, delete from DB
+            await File.deleteOne({ _id: req.params.id });
+            console.log(`File with ID ${req.params.id} deleted from DB`);
+            res.send({ message: 'File deleted successfully' });
         });
     } catch (err) {
         console.error('Error during file deletion process:', err);
