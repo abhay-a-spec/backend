@@ -1,108 +1,76 @@
 const express = require('express');
-const multer = require('multer');
 const mongoose = require('mongoose');
+const multer = require('multer');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
-const fs = require('fs');  // Added to handle file system operations
-require('dotenv').config();  // Import dotenv to access environment variables
 
-// Initialize app
 const app = express();
-
-// Enable CORS for frontend and backend communication
 app.use(cors());
-
-// Middleware to parse incoming JSON requests
 app.use(express.json());
 
-// MongoDB Connection using Atlas URI from environment variable
-const mongoURI = process.env.MONGO_URI;
+// MongoDB connection
+mongoose.connect('your_mongodb_uri_here', { useNewUrlParser: true, useUnifiedTopology: true });
 
-mongoose.connect(mongoURI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-.then(() => console.log('Connected to MongoDB'))
-.catch(err => console.log('Error connecting to MongoDB:', err));
-
-// File Schema and Model
-const fileSchema = new mongoose.Schema({
+// Define File Schema
+const File = mongoose.model('File', new mongoose.Schema({
     name: String,
-    url: String,
-    dateUploaded: { type: Date, default: Date.now }
-});
+    path: String,
+}));
 
-const File = mongoose.model('File', fileSchema);
+// Setup Multer for file uploads
+const upload = multer({ dest: 'uploads/' });
 
-// Ensure the uploads directory exists (for file storage)
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
-}
-
-// Set up Multer for file upload
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir); // Store files locally in the "uploads" folder
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Name the file with a timestamp
-    }
-});
-
-const upload = multer({ storage });
-
-// Upload File API
+// Upload endpoint
 app.post('/upload', upload.single('file'), async (req, res) => {
-    // Check if a file is uploaded
-    if (!req.file) {
-        return res.status(400).json({ message: 'No file uploaded.' });
-    }
+    if (!req.file) return res.status(400).send({ message: 'No file uploaded' });
 
-    const file = req.file;
-    const newFile = new File({
-        name: file.filename,
-        url: `/uploads/${file.filename}`  // Store the file URL
+    const file = new File({
+        name: req.file.originalname,
+        path: req.file.path,
     });
 
-    try {
-        await newFile.save();  // Save file info to MongoDB
-        res.json({ message: 'File uploaded successfully!', file: newFile });
-    } catch (error) {
-        console.error('Error uploading file:', error);  // Log the actual error
-        res.status(500).json({ message: 'Error uploading file' });
-    }
+    await file.save();
+    res.send({ message: 'File uploaded successfully' });
 });
 
-// List Files API
+// Fetch all files
 app.get('/files', async (req, res) => {
-    try {
-        const files = await File.find();  // Fetch all file records from MongoDB
-        res.json(files);
-    } catch (error) {
-        console.error('Error fetching files:', error);
-        res.status(500).json({ message: 'Error fetching files' });
-    }
+    const files = await File.find();
+    res.send(files);
 });
 
-// Download File API
+// Download file by ID
 app.get('/files/:id', async (req, res) => {
+    const file = await File.findById(req.params.id);
+    if (!file) return res.status(404).send({ message: 'File not found' });
+
+    res.download(file.path, file.name);
+});
+
+// ✅ DELETE file by ID (NEW)
+app.delete('/files/:id', async (req, res) => {
     try {
-        const file = await File.findById(req.params.id);  // Find the file by its ID
-        if (!file) {
-            return res.status(404).json({ message: 'File not found' });
-        }
-        res.download(path.join(__dirname, file.url));  // Download the file from the server
-    } catch (error) {
-        console.error('Error downloading file:', error);
-        res.status(500).json({ message: 'Error downloading file' });
+        const file = await File.findById(req.params.id);
+        if (!file) return res.status(404).send({ message: 'File not found' });
+
+        // Delete file from disk
+        fs.unlink(file.path, async (err) => {
+            if (err) {
+                console.error('Error deleting file from disk:', err);
+                return res.status(500).send({ message: 'Error deleting file from disk' });
+            }
+
+            // Delete from MongoDB
+            await File.deleteOne({ _id: req.params.id });
+            res.send({ message: 'File deleted successfully' });
+        });
+    } catch (err) {
+        console.error('Delete error:', err);
+        res.status(500).send({ message: 'Internal server error' });
     }
 });
 
-// Serve uploaded files statically (i.e., access the files directly via URL)
-app.use('/uploads', express.static(uploadDir));
-
-// Start the server
-app.listen(5000, () => {
-    console.log('Server running on port 5000');
-});
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
