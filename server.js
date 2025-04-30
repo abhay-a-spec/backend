@@ -48,21 +48,37 @@ app.get('/files/:id', async (req, res) => {
     if (!file) return res.status(404).send({ message: 'File not found' });
     res.download(file.path, file.name);
 });
-
-// DELETE by filename (new route)
 app.delete('/files/deleteByName/:name', async (req, res) => {
-    const fileName = req.params.name;
-    const file = await File.findOne({ name: fileName });
+    try {
+        const fileName = decodeURIComponent(req.params.name);
+        console.log(`Received delete request for file: ${fileName}`);
 
-    if (!file) return res.status(404).send({ message: 'File not found in DB' });
-    if (!file.path || !fs.existsSync(file.path)) return res.status(400).send({ message: 'File not found on disk' });
+        const file = await File.findOne({ name: fileName });
 
-    fs.unlink(file.path, async (err) => {
-        if (err) return res.status(500).send({ message: 'Failed to delete file from disk' });
+        if (!file) {
+            console.error(`File not found in DB: ${fileName}`);
+            return res.status(404).send({ message: 'File not found in DB' });
+        }
 
-        await File.deleteOne({ _id: file._id });
-        res.send({ message: 'File deleted successfully' });
-    });
+        if (!file.path || !fs.existsSync(file.path)) {
+            console.error(`File not found on disk: ${file.path}`);
+            return res.status(400).send({ message: 'File not found on disk' });
+        }
+
+        fs.unlink(file.path, async (err) => {
+            if (err) {
+                console.error('Disk deletion error:', err);
+                return res.status(500).send({ message: 'Failed to delete from disk' });
+            }
+
+            await File.deleteOne({ _id: file._id });
+            console.log(`File deleted successfully: ${fileName}`);
+            res.send({ message: 'File deleted successfully' });
+        });
+    } catch (err) {
+        console.error('Server error during delete:', err);
+        res.status(500).send({ message: 'Internal server error' });
+    }
 });
 
 const PORT = process.env.PORT || 5000;
