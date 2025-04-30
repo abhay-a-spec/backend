@@ -50,9 +50,11 @@ app.get('/files/:id', async (req, res) => {
 });
 app.delete('/files/deleteByName/:name', async (req, res) => {
     try {
+        // Decode the file name to handle special characters
         const fileName = decodeURIComponent(req.params.name);
         console.log(`Received delete request for file: ${fileName}`);
 
+        // Find the file in the DB based on its name
         const file = await File.findOne({ name: fileName });
 
         if (!file) {
@@ -60,24 +62,27 @@ app.delete('/files/deleteByName/:name', async (req, res) => {
             return res.status(404).send({ message: 'File not found in DB' });
         }
 
+        // Ensure the file exists on disk
         if (!file.path || !fs.existsSync(file.path)) {
-            console.error(`File not found on disk: ${file.path}`);
+            console.error(`File path is invalid or file does not exist: ${file.path}`);
             return res.status(400).send({ message: 'File not found on disk' });
         }
 
+        // Try to delete the file from the server's disk
         fs.unlink(file.path, async (err) => {
             if (err) {
-                console.error('Disk deletion error:', err);
+                console.error('Error deleting file from disk:', err);
                 return res.status(500).send({ message: 'Failed to delete from disk' });
             }
 
-            await File.deleteOne({ _id: file._id });
-            console.log(`File deleted successfully: ${fileName}`);
+            // Once the file is deleted from disk, remove it from the database
+            await File.deleteOne({ name: fileName });
+            console.log(`File successfully deleted: ${fileName}`);
             res.send({ message: 'File deleted successfully' });
         });
     } catch (err) {
-        console.error('Server error during delete:', err);
-        res.status(500).send({ message: 'Internal server error' });
+        console.error('Error during file deletion:', err);
+        res.status(500).send({ message: 'Internal server error during file deletion' });
     }
 });
 
