@@ -25,9 +25,12 @@ const upload = multer({ dest: 'uploads/' });
 app.post('/upload', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).send({ message: 'No file uploaded' });
 
+    // Ensure we save the full path using path.join
+    const fullPath = path.join(__dirname, 'uploads', req.file.filename);
+
     const file = new File({
         name: req.file.originalname,
-        path: req.file.path,
+        path: fullPath, // Save the full path
     });
 
     await file.save();
@@ -58,6 +61,7 @@ app.get('/files/:id', async (req, res) => {
     }
 });
 
+// Delete file by ID
 app.delete('/files/:id', async (req, res) => {
     try {
         console.log(`Attempting to delete file with ID: ${req.params.id}`);
@@ -71,10 +75,10 @@ app.delete('/files/:id', async (req, res) => {
 
         console.log(`Found file: ${file.name} at path: ${file.path}`);
 
-        // If file path is not defined, return error
-        if (!file.path) {
-            console.error(`File path for ${file.name} is undefined`);
-            return res.status(400).send({ message: 'File path is missing' });
+        // Ensure file path exists
+        if (!file.path || !fs.existsSync(file.path)) {
+            console.error(`File path for ${file.name} is invalid or file does not exist`);
+            return res.status(400).send({ message: 'File path is invalid or file does not exist' });
         }
 
         // Attempt to delete the file from disk
@@ -100,7 +104,6 @@ app.delete('/files/:id', async (req, res) => {
         res.status(500).send({ message: 'Internal server error during deletion' });
     }
 });
-
 
 // Start server
 const PORT = process.env.PORT || 5000;
