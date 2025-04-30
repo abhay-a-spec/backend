@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB connection
-mongoose.connect('your_mongodb_uri_here', { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connect('mongodb+srv://abhayadmin:19April2004@cluster0.utya8lb.mongodb.net/fileSharing?retryWrites=true&w=majority', { useNewUrlParser: true, useUnifiedTopology: true });
 
 // Define File Schema
 const File = mongoose.model('File', new mongoose.Schema({
