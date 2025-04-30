@@ -58,7 +58,6 @@ app.get('/files/:id', async (req, res) => {
     }
 });
 
-// ✅ DELETE file by ID (robust version)
 app.delete('/files/:id', async (req, res) => {
     try {
         console.log(`Attempting to delete file with ID: ${req.params.id}`);
@@ -70,7 +69,13 @@ app.delete('/files/:id', async (req, res) => {
             return res.status(404).send({ message: 'File not found in DB' });
         }
 
-        console.log(`Found file: ${file.name} at ${file.path}`);
+        console.log(`Found file: ${file.name} at path: ${file.path}`);
+
+        // If file path is not defined, return error
+        if (!file.path) {
+            console.error(`File path for ${file.name} is undefined`);
+            return res.status(400).send({ message: 'File path is missing' });
+        }
 
         // Attempt to delete the file from disk
         fs.unlink(file.path, async (err) => {
@@ -95,6 +100,7 @@ app.delete('/files/:id', async (req, res) => {
         res.status(500).send({ message: 'Internal server error during deletion' });
     }
 });
+
 
 // Start server
 const PORT = process.env.PORT || 5000;
